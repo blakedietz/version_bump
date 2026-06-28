@@ -83,3 +83,28 @@ fn is_name_error(result: Result(String, error.ReleaseError)) -> Bool {
     _ -> False
   }
 }
+
+// --- published_ok (publish verification) -----------------------------------
+
+/// The success line gleam prints means the package really went out.
+pub fn published_ok_accepts_success_marker_test() {
+  hex.published_ok(
+    " Publishing version_bump v0.1.2\n Publishing documentation\n  Published package and documentation\n",
+  )
+  |> should.equal(True)
+}
+
+/// The <1.0.0 warning contains the lowercase word "published" but NOT the
+/// "Published package" success line, so an aborted 0.x publish (which still
+/// exits 0) must be treated as a failure — this is the false-success guard.
+pub fn published_ok_rejects_0x_abort_test() {
+  hex.published_ok(
+    "If your package is not ready to be used in production it should not\nbe published.\n\nType 'I am not using semantic versioning' to continue: \n",
+  )
+  |> should.equal(False)
+}
+
+pub fn published_ok_rejects_empty_test() {
+  hex.published_ok("")
+  |> should.equal(False)
+}

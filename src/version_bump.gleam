@@ -23,8 +23,10 @@ import version_bump/error.{type ReleaseError}
 import version_bump/logging
 import version_bump/task
 
-/// The tool version, kept in sync with `gleam.toml`.
-const version = "0.1.0"
+/// The tool version, kept in sync with `gleam.toml`. Bump this alongside a
+/// release: the pipeline updates `gleam.toml` but not this compiled-in constant,
+/// so it must be set to the version the release will publish.
+const version = "0.1.2"
 
 /// The parsed CLI invocation. The default run is `Release(cwd, dry_run)`; the
 /// other variants short-circuit before touching the pipeline. Public so the pure
