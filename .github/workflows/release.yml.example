@@ -44,14 +44,17 @@ jobs:
 
       - run: gleam deps download
 
+      - run: gleam test # gate the release on a green build
+
       # Run the release. Adjust to how you consume the tool — e.g. once it's a
       # dev dependency, `gleam run -m version_bump`.
       - run: gleam run -m version_bump
         env:
           # github plugin -> create the GitHub Release (covered by contents: write).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # hex plugin -> `gleam publish`. Create the key once with
-          # `gleam hex authenticate`, then add it as a repo secret HEX_API_KEY.
+          # hex plugin -> `gleam publish`. Create a key with publish/API-write
+          # permission at hex.pm -> Dashboard -> Keys, add it as repo secret
+          # HEX_API_KEY. (`gleam hex authenticate` is for LOCAL publishing.)
           HEXPM_API_KEY: ${{ secrets.HEX_API_KEY }}
 # ----------------------------------------------------------------------------
 # Need the release commit to TRIGGER other workflows, or to push to a

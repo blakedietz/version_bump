@@ -41,8 +41,11 @@ error is returned.
 Tokens are read from the process environment (plugins also accept them through
 the context env). None are needed for `--dry-run`:
 
-- `HEXPM_API_KEY` — required by the `hex` plugin to `gleam publish` (create one
-  with `gleam hex authenticate`).
+- `HEXPM_API_KEY` — required by the `hex` plugin to `gleam publish`. Generate a
+  key with **publish (API write) permission** at hex.pm → Dashboard → Keys (a
+  read-only key authenticates but cannot publish). `verify_conditions` only
+  checks the key is present, so the `publish` step verifies the package actually
+  reached Hex and fails loudly otherwise.
 - `NPM_TOKEN` — required by the `npm` plugin's `verify_conditions`.
 - `GITHUB_TOKEN` (or `GH_TOKEN`) — required by the `github` plugin's
   `verify_conditions`. `GITHUB_TOKEN` takes precedence over `GH_TOKEN`.
@@ -180,6 +183,12 @@ This keeps the package in `0.x` until you're ready to commit to a stable API —
 release `1.0.0` yourself (set `version` in `gleam.toml` and tag it), after which
 the flag has no further effect.
 
+> **Publishing a 0.x package to Hex:** `gleam publish` guards releases below
+> `1.0.0` behind a prompt that makes you type `I am not using semantic
+> versioning`, which `--yes` does not auto-accept — so a naive non-interactive
+> publish silently aborts. The `hex` plugin supplies that phrase for you, so 0.x
+> releases publish unattended in CI.
+
 ### Branches
 
 A branch entry is either a bare string (just the name) or an object:
@@ -234,6 +243,10 @@ source of truth), simply drop `git` from `plugins`.
 
 ## Releasing in CI (GitHub Actions)
 
+> **Full step-by-step guide:** [docs/github-actions-release.md](docs/github-actions-release.md)
+> — Hex key creation, the secret, the workflow, permissions, the first release,
+> the gotchas, and a command reference. The summary below is the short version.
+
 A ready-to-copy workflow lives at
 [`.github/workflows/release.yml.example`](.github/workflows/release.yml.example) —
 copy it to `.github/workflows/release.yml` in your package. (`version_bump`'s own
@@ -263,8 +276,8 @@ default `GITHUB_TOKEN` to read-only). The rest:
   automatically.
 - Pass `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` to the run step for the
   `github` plugin, and `HEXPM_API_KEY: ${{ secrets.HEX_API_KEY }}` for `hex`
-  (create the Hex key once with `gleam hex authenticate`, then add it as a repo
-  secret).
+  (create a key with publish/API-write permission at hex.pm → Dashboard → Keys,
+  then add it as a repo secret — see the [full guide](docs/github-actions-release.md)).
 
 So `GITHUB_TOKEN` itself is automatic — the only setup is the `contents: write`
 permission and the `HEX_API_KEY` secret.
