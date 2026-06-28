@@ -7,6 +7,13 @@ links = [
   { title = "semantic-release (upstream)", href = "https://github.com/semantic-release/semantic-release" },
 ]
 
+# Extra prose pages to include in the generated HexDocs (the README is the index
+# automatically; everything else must be listed here).
+[documentation]
+pages = [
+  { title = "GitHub Actions release guide", path = "github-actions-release.html", source = "docs/github-actions-release.md" },
+]
+
 # version_bump releases itself (dogfooding). Initial-development mode keeps it in
 # 0.x — breaking changes bump the minor version until a 1.0.0 is cut by hand.
 [tools.version_bump]
