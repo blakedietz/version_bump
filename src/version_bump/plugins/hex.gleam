@@ -186,17 +186,31 @@ fn publish(
 /// Shell out to `gleam publish --yes`, mapping a non-zero exit to a
 /// `PluginError`.
 fn run_gleam_publish(cwd: String) -> Result(Nil, ReleaseError) {
+  // `gleam publish` guards releases below 1.0.0 behind a prompt that requires
+  // typing the exact phrase below, and `--yes` does NOT auto-accept it. In CI
+  // (no TTY, stdin at EOF) that prompt reads "" and the publish silently aborts
+  // — yet still exits 0. So pipe the phrase into stdin via a shell: 0.x releases
+  // then publish non-interactively, `--yes` still covers the ordinary y/N
+  // confirmation, and for >= 1.0.0 the piped line is simply never read.
+  //
+  // Two consequences of the shell pipe: it assumes a POSIX `sh` (true on the
+  // Linux/macOS runners where releases run), and `sh -c`'s exit status is the
+  // pipeline's last command (`gleam publish`), so a real non-zero exit still
+  // surfaces. Output streams (LetBe*) rather than being captured so a failed
+  // publish is visible in the log instead of swallowed.
+  let publish =
+    "echo 'I am not using semantic versioning' | gleam publish --yes"
   case
-    shellout.command(run: "gleam", with: ["publish", "--yes"], in: cwd, opt: [])
+    shellout.command(run: "sh", with: ["-c", publish], in: cwd, opt: [
+      shellout.LetBeStdout,
+      shellout.LetBeStderr,
+    ])
   {
     Ok(_) -> Ok(Nil)
-    Error(#(code, message)) ->
+    Error(#(code, _message)) ->
       Error(PluginError(
         plugin_name,
-        "`gleam publish --yes` failed (exit "
-          <> int.to_string(code)
-          <> "): "
-          <> string.trim(message),
+        "`gleam publish --yes` failed (exit " <> int.to_string(code) <> ")",
       ))
   }
 }
