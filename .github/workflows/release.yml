@@ -1,0 +1,52 @@
+# version_bump releases ITSELF (dogfooding).
+#
+# On a push to `main` it: works out the next version from the Conventional
+# Commits since the last tag, bumps gleam.toml (hex), commits + pushes that bump
+# and the tag (git + engine), publishes to Hex (hex), and creates a GitHub
+# Release (github). Initial-development mode (set in gleam.toml) keeps it in 0.x.
+#
+# Prerequisites on GitHub before this runs:
+#   * a repo secret `HEX_API_KEY`  (create with `gleam hex authenticate`)
+#   * Settings -> Actions -> Workflow permissions = read/write  (or the
+#     `permissions: contents: write` below is enough on most repos)
+name: release
+
+on:
+  push:
+    branches: [main]
+
+# Needed for BOTH the git push of the release commit + tag and the GitHub Release.
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags: a shallow clone makes every run look like a
+          # first release. The default persisted credentials let `git push`
+          # authenticate with GITHUB_TOKEN.
+          fetch-depth: 0
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          gleam-version: "1.17.0"
+
+      - run: gleam deps download
+
+      # Gate the release on a green build/test.
+      - run: gleam test
+
+      # Run version_bump's own pipeline (gleam run -> version_bump.main). No
+      # `--dry-run`: this performs the real release.
+      - run: gleam run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEXPM_API_KEY: ${{ secrets.HEX_API_KEY }}

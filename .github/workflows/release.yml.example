@@ -1,0 +1,69 @@
+# Release workflow for a Gleam package using version_bump.
+#
+# TEMPLATE — copy this to `.github/workflows/release.yml` in your package and
+# remove the `.example` suffix. (As `.example` it is inert; GitHub Actions only
+# runs `.yml`/`.yaml` files, so this file won't trigger releases of this repo.)
+#
+# On a push to a release branch it: works out the next version from the
+# Conventional Commits since the last tag, bumps `gleam.toml` (hex), commits and
+# pushes that bump + the tag (git), publishes to Hex (hex), and creates a GitHub
+# Release (github).
+name: release
+
+on:
+  push:
+    branches: [main] # add your other release branches here (next, beta, ...)
+
+# REQUIRED. The built-in GITHUB_TOKEN needs write access for BOTH:
+#   * `git push` of the release commit and tag (via actions/checkout's credentials)
+#   * creating the GitHub Release (github plugin)
+# Many repos default GITHUB_TOKEN to read-only — without this line both 403.
+permissions:
+  contents: write
+
+# Don't let two releases run at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + all tags: a shallow clone makes every run look like a
+          # first release. checkout's default `persist-credentials: true` is what
+          # lets `git push` authenticate with GITHUB_TOKEN automatically.
+          fetch-depth: 0
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          gleam-version: "1.17.0" # match your project's toolchain
+
+      - run: gleam deps download
+
+      # Run the release. Adjust to how you consume the tool — e.g. once it's a
+      # dev dependency, `gleam run -m version_bump`.
+      - run: gleam run -m version_bump
+        env:
+          # github plugin -> create the GitHub Release (covered by contents: write).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # hex plugin -> `gleam publish`. Create the key once with
+          # `gleam hex authenticate`, then add it as a repo secret HEX_API_KEY.
+          HEXPM_API_KEY: ${{ secrets.HEX_API_KEY }}
+# ----------------------------------------------------------------------------
+# Need the release commit to TRIGGER other workflows, or to push to a
+# branch-protected branch? The built-in GITHUB_TOKEN can do neither. Use a
+# fine-grained PAT (Contents: read+write) or a GitHub App token stored as a
+# secret (e.g. RELEASE_TOKEN), and pass it to BOTH checkout and the run step:
+#
+#       - uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
+#           token: ${{ secrets.RELEASE_TOKEN }}          # git push uses this
+#       - run: gleam run -m version_bump
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}   # REST API uses this
+#           HEXPM_API_KEY: ${{ secrets.HEX_API_KEY }}

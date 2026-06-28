@@ -1,0 +1,15 @@
+{
+  "comment": "Example for releasing a GLEAM package to Hex. Version lives in gleam.toml; the `hex` plugin runs `gleam publish`. Auth via the HEXPM_API_KEY env var (gleam hex authenticate). Hex has no dist-tags, so prerelease branches publish ordinary semver prereleases rather than channels.",
+  "repositoryUrl": "https://github.com/your-org/your-gleam-pkg",
+  "tagFormat": "v${version}",
+  "branches": [
+    "main",
+    { "name": "beta", "prerelease": "beta" }
+  ],
+  "plugins": [
+    "commit-analyzer",
+    "release-notes-generator",
+    "hex",
+    "github"
+  ]
+}

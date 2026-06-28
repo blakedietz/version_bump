@@ -1,0 +1,25 @@
+{
+  "repositoryUrl": "https://github.com/your-org/your-repo",
+  "tagFormat": "v${version}",
+  "branches": [
+    "main",
+    "master",
+    { "name": "next", "channel": "next" },
+    { "name": "beta", "prerelease": "beta" },
+    { "name": "alpha", "prerelease": "alpha" }
+  ],
+  "plugins": [
+    "commit-analyzer",
+    "release-notes-generator",
+    "npm",
+    "github",
+    [
+      "exec",
+      {
+        "verifyConditionsCmd": "./scripts/check-env.sh",
+        "publishCmd": "./scripts/deploy.sh ${nextRelease.version}",
+        "successCmd": "./scripts/notify.sh released ${nextRelease.version}"
+      }
+    ]
+  ]
+}
