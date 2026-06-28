@@ -1,5 +1,5 @@
 name = "version_bump"
-version = "0.1.1"
+version = "0.1.2"
 description = "Conventional-Commits-driven semantic releases for Gleam: analyse commits, compute the next version, generate release notes, and publish to Hex/npm and GitHub. A native Gleam port of semantic-release."
 licences = ["MIT"]
 repository = { type = "github", user = "blakedietz", repo = "version_bump" }
