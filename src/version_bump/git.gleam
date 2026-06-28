@@ -113,13 +113,28 @@ pub fn list_branches(cwd: String) -> Result(List(String), ReleaseError) {
   |> list.filter(fn(name) { !string.contains(name, " -> ") })
 }
 
-/// Create an annotated tag at `HEAD`.
+/// Create an annotated tag at `HEAD`. The committer identity is set per-command
+/// (an annotated tag records a tagger, which git refuses to invent) so this works
+/// on a bare CI runner with no `user.name`/`user.email` configured — matching how
+/// the `git` plugin's commit sets its identity.
 pub fn create_tag(
   cwd: String,
   tag: String,
   message: String,
 ) -> Result(Nil, ReleaseError) {
-  use _ <- result.map(run(cwd, ["tag", "-a", tag, "-m", message]))
+  use _ <- result.map(
+    run(cwd, [
+      "-c",
+      "user.name=version_bump",
+      "-c",
+      "user.email=version_bump@users.noreply.github.com",
+      "tag",
+      "-a",
+      tag,
+      "-m",
+      message,
+    ]),
+  )
   Nil
 }
 
