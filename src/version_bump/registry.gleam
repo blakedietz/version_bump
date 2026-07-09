@@ -12,6 +12,7 @@ import gleam/dict.{type Dict}
 import version_bump/plugin.{type Plugin}
 import version_bump/plugins/commit_analyzer
 import version_bump/plugins/exec
+import version_bump/plugins/forgejo
 import version_bump/plugins/git
 import version_bump/plugins/github
 import version_bump/plugins/hex
@@ -27,6 +28,7 @@ pub fn default() -> Dict(String, Plugin) {
     #("hex", hex.plugin()),
     #("git", git.plugin()),
     #("github", github.plugin()),
+    #("forgejo", forgejo.plugin()),
     #("exec", exec.plugin()),
   ]
   |> dict.from_list

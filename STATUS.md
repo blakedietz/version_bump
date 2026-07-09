@@ -50,7 +50,8 @@ Concretely:
   Gleam body using `gleam_httpc` (used on Erlang and any target without an
   external) plus an `@external(javascript, …)` that uses the native `fetch` API
   (`gh_http_ffi.mjs`). Both yield a `Task(#(status, body))`, so the create-release
-  logic above them is target-agnostic.
+  logic above them is target-agnostic. `src/version_bump/forgejo_api.gleam`
+  mirrors the same seam (`forgejo_http_ffi.mjs`) for Forgejo instances.
 - **Process exit FFI:** `version_bump_ffi.erl` (`erlang:halt/1`) and
   `version_bump_ffi.mjs` (`process.exit`) back the CLI's `halt`.
 - **Subprocesses via `shellout`** (cross-target): `git` (log/tag/rev-parse/
@@ -123,11 +124,13 @@ types). This was **not** taken. The consequences of that choice:
 | `src/version_bump/plugin.gleam` | The plugin contract: a `Plugin` is a record of `Option(hook)` fields, one per lifecycle hook (`verify_conditions`, `analyze_commits`, `verify_release`, `generate_notes`, `add_channel`, `prepare`, `publish`, `success`, `fail`). `new(name)` builds an all-`None` plugin. (Gleam has no duck typing, so optional fields stand in for "does this hook exist?".) `publish` returns a `Task` (asynchronous); all other hooks are synchronous. |
 | `src/version_bump/task.gleam` | Cross-target async primitive. Opaque `Task(a)` with `resolve`/`map`/`await`/`run`, backed by FFI: an eager value on Erlang (`version_bump_task_ffi.erl`), a `Promise` on JavaScript (`version_bump_task_ffi.mjs`). Lets the `publish` path be synchronous on the BEAM and promise-based on Node from one codebase. |
 | `src/version_bump/context.gleam` | The immutable `Context` threaded through hooks (cwd, env, config, branch(es), commits, last/next release, releases, errors, dry_run) plus `new`. The engine produces a new `Context` as the pipeline advances. |
-| `src/version_bump/registry.gleam` | The built-in plugin registry: a `Dict(String, Plugin)` mapping short names (`commit-analyzer`, `release-notes-generator`, `npm`, `github`, `exec`) to their `Plugin`. Resolution of an unknown name is a config error. Plain value, no IO, no dynamic loading. |
+| `src/version_bump/registry.gleam` | The built-in plugin registry: a `Dict(String, Plugin)` mapping short names (`commit-analyzer`, `release-notes-generator`, `npm`, `hex`, `git`, `github`, `forgejo`, `exec`) to their `Plugin`. Resolution of an unknown name is a config error. Plain value, no IO, no dynamic loading. |
 | `src/version_bump/runner.gleam` | Hook runners with per-hook combination semantics: effect hooks (verify_conditions/verify_release/prepare/success/fail) collect *all* errors into an `AggregateError`; `analyze_commits` keeps the highest `ReleaseType`; `generate_notes` concatenates in plugin order; `publish` collects the `Some(release)` results. |
 | `src/version_bump/engine.gleam` | The pipeline orchestrator. Builds the context, resolves plugins, then runs verify_conditions -> last release -> commits -> analyze_commits -> next version/`NextRelease` -> verify_release -> generate_notes -> (dry-run short-circuit) -> prepare -> create+push tag -> publish -> success. Any failure from verify_conditions onward runs the `fail` hooks before propagating. Returns a `Summary`. |
 | `src/version_bump/git.gleam` | Git access via `shellout` over the `git` binary. `parse_log` (pure) decodes a custom `--pretty` format delimited by ASCII unit/record separators; effectful helpers: `log_since`, `get_tags`, `current_branch`, `head_sha`, `list_branches`, `create_tag` (an annotated tag — sets a per-command committer identity so it works on a bare CI runner with no `user.name`/`user.email`), `push`, `get_remote_url`. |
-| `src/version_bump/github_api.gleam` | Minimal GitHub REST client. Pure `build_create_release_request` and `parse_repo_url` (https/ssh/`git@` forms) separated from the effectful `create_release` (sends via `httpc`, maps non-2xx/transport errors to `NetworkError`, parses `html_url`). |
+| `src/version_bump/repo_url.gleam` | Pure git-remote-URL parsing shared by the forge plugins: `parse` extracts a `RepoRef(host, owner, repo)` from https/ssh/`git@`/`git+` forms (host keeps an explicit `:port`). |
+| `src/version_bump/github_api.gleam` | Minimal GitHub REST client. Pure `build_release_payload` and `parse_repo_url` (delegating to `repo_url`) separated from the effectful `create_release` (sends via `httpc`, maps non-2xx/transport errors to `NetworkError`, parses `html_url`). |
+| `src/version_bump/forgejo_api.gleam` | Minimal Forgejo/Gitea REST client, mirroring `github_api` with an instance-dependent base URL (`{base}/api/v1/...`) and `token`-scheme auth. Pure `build_release_payload`/`release_endpoint`; effectful `create_release`. |
 | `src/version_bump/logging.gleam` | Leveled, prefixed logger (`[version_bump]` + colorized level via `gleam_community/ansi`). `info`/`warn`/`error`/`success`; pure `format` for testing. |
 
 ### Plugins (`src/version_bump/plugins/`)
@@ -140,6 +143,7 @@ types). This was **not** taken. The consequences of that choice:
 | `hex.gleam` | Gleam-native plugin (no semantic-release equivalent) for publishing a Gleam package to **Hex**. `verify_conditions` (require `gleam.toml` with `description` + `licences`, and `HEXPM_API_KEY`, skipped on dry-run), `prepare` (rewrite the top-level `version` in `gleam.toml` via a pure `set_version`), `publish` (runs `gleam publish --yes` via `sh -c`, piping `I am not using semantic versioning` to stdin so sub-1.0.0 releases clear gleam's 0.x guard non-interactively, then **verifies** the captured output contains the `Published package` success line — `gleam publish` can exit 0 without publishing — failing loudly otherwise via the pure `published_ok`; reports the hex.pm URL). No `add_channel`: Hex has no dist-tags, so prereleases publish as ordinary semver prereleases. |
 | `git.gleam` | `@semantic-release/git` port. `prepare` only: stages the configured `assets` (default `gleam.toml`) and commits them (`chore(release): ${version} [skip ci]` by default, with a per-command committer identity), so the engine's tag lands on the commit containing the bump. The engine then pushes the branch and the tag. Options: `assets`, `message`, `committerName`, `committerEmail`. PURE `render_message`/`parse_assets` helpers. |
 | `github.gleam` | `@semantic-release/github` port. `verify_conditions` (require `GITHUB_TOKEN`/`GH_TOKEN` + a parseable `repositoryUrl`), `publish` (create the GitHub release via `github_api`), `success` (log line). |
+| `forgejo.gleam` | Forgejo/Codeberg counterpart of the `github` plugin. `verify_conditions` (require `FORGEJO_TOKEN`/`GITEA_TOKEN` + a parseable `repositoryUrl`, skipped on dry-run), `publish` (create the release via `forgejo_api`; API base derived from the repo URL host, overridable via the `url` option or `FORGEJO_URL`/`GITEA_URL`), `success` (log line). |
 | `exec.gleam` | `@semantic-release/exec` port. Wires all hooks to user-supplied shell commands (`verifyConditionsCmd`, `analyzeCommitsCmd`, `verifyReleaseCmd`, `generateNotesCmd`, `prepareCmd`, `publishCmd`, `successCmd`, `failCmd`) run via `sh -c`. analyze_commits parses stdout into a `ReleaseType`; generate_notes uses stdout as notes; publish reports "not handled". |
 
 ---
@@ -177,11 +181,14 @@ Gleam plugins and registered in `registry.gleam`:
 - **commit-analyzer** — implemented (analyze_commits).
 - **release-notes-generator** — implemented (generate_notes).
 - **npm** — implemented (verify_conditions, prepare, publish).
+- **hex** — implemented (verify_conditions, prepare, publish).
+- **git** — implemented (prepare).
 - **github** — implemented (verify_conditions, publish, success).
+- **forgejo** — implemented (verify_conditions, publish, success).
 - **exec** — implemented (all hooks, command-driven).
 
 Plugin *resolution* is closed-world: a configured plugin name must be one of
-these five built-ins or the run fails with `ConfigError("Unknown plugin ...")`.
+the registered built-ins or the run fails with `ConfigError("Unknown plugin ...")`.
 
 ---
 

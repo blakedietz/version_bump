@@ -49,6 +49,8 @@ the context env). None are needed for `--dry-run`:
 - `NPM_TOKEN` — required by the `npm` plugin's `verify_conditions`.
 - `GITHUB_TOKEN` (or `GH_TOKEN`) — required by the `github` plugin's
   `verify_conditions`. `GITHUB_TOKEN` takes precedence over `GH_TOKEN`.
+- `FORGEJO_TOKEN` (or `GITEA_TOKEN`) — required by the `forgejo` plugin's
+  `verify_conditions`. `FORGEJO_TOKEN` takes precedence over `GITEA_TOKEN`.
 
 ## Install / build
 
@@ -156,7 +158,7 @@ Any recognised keys override the defaults; unknown keys are ignored. Fields
 
 | gleam.toml / `.releaserc.*`        | Type   | Default        | Meaning                                       |
 | ---------------------------------- | ------ | -------------- | --------------------------------------------- |
-| `repository_url` / `repositoryUrl` | string | derived / none | repo URL; used by the `github` plugin         |
+| `repository_url` / `repositoryUrl` | string | derived / none | repo URL; used by the `github`/`forgejo` plugins |
 | `tag_format` / `tagFormat`         | string | `v${version}`  | git tag template; `${version}` is substituted |
 | `branches` / `branches`            | array  | the 5 defaults | release branches (see below)                  |
 | `plugins` / `plugins`              | array  | the 5 defaults | plugin pipeline (see below)                   |
@@ -222,8 +224,8 @@ plugin reparses what it needs).
 ```
 
 The built-in plugin names are: `commit-analyzer`, `release-notes-generator`,
-`hex`, `npm`, `git`, `github`, and `exec`. An unknown plugin name is a
-configuration error. In `gleam.toml`, plugin options live in
+`hex`, `npm`, `git`, `github`, `forgejo`, and `exec`. An unknown plugin name is
+a configuration error. In `gleam.toml`, plugin options live in
 `[tools.version_bump.plugin_options.<name>]` sub-tables (shown above); the
 JSON sources use the `[name, { options }]` array form shown here.
 
@@ -240,6 +242,26 @@ This means a real release **pushes a commit to your release branch**, so the CI
 token needs branch-push permission. If you prefer the tag-only model (leave the
 committed `gleam.toml` version as a placeholder and treat the tag + Hex as the
 source of truth), simply drop `git` from `plugins`.
+
+### The `forgejo` plugin (Codeberg / self-hosted Forgejo)
+
+For repositories hosted on [Codeberg](https://codeberg.org) or any other
+[Forgejo](https://forgejo.org) instance, swap `github` for `forgejo` in
+`plugins` — it creates the release through Forgejo's Gitea-compatible API,
+authenticating with `FORGEJO_TOKEN` (or `GITEA_TOKEN`). The instance's API base
+URL is derived from the host in the repository URL
+(`https://codeberg.org/owner/repo` → `https://codeberg.org/api/v1/...`). When
+the git remote host is not the API host — an SSH alias, a custom port, plain
+http — set it explicitly with the `url` option or the `FORGEJO_URL`/`GITEA_URL`
+environment variables:
+
+```toml
+[tools.version_bump]
+plugins = ["commit-analyzer", "release-notes-generator", "hex", "git", "forgejo"]
+
+[tools.version_bump.plugin_options.forgejo]
+url = "https://git.example.com:3000"
+```
 
 ## Releasing in CI (GitHub Actions)
 
